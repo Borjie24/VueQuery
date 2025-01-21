@@ -1,0 +1,142 @@
+Install TanStack Query
+Run the following command to install TanStack Query:
+
+npm install @tanstack/vue-query
+
+File Structure
+Here’s how to organize your project for better maintainability:
+
+Setup Query Client in main.js
+Create a QueryClient instance and configure Vue Query in your app’s entry point.
+
+In src/main.js:
+import { createApp } from 'vue';
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
+import App from './App.vue';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60000, // Data remains fresh for 60 seconds
+      cacheTime: 300000, // Cache remains for 5 minutes
+      refetchOnWindowFocus: false, // Prevent refetch on window focus
+    },
+  },
+});
+
+const app = createApp(App);
+app.use(VueQueryPlugin, { queryClient });
+app.mount('#app');
+Step 4: Create an API Service (FetchAPI.js)
+Create a reusable service for making API requests. This will handle HTTP requests to the backend.
+
+In src/api/FetchAPI.js:
+import axios from 'axios';
+
+class FetchAPI {
+  constructor(baseURL) {
+    this.api = axios.create({ baseURL });
+  }
+
+  get(url) {
+    return this.api.get(url);
+  }
+}
+
+export default new FetchAPI('http://localhost:3000'); // Replace with your API base URL
+
+Step 5: Fetch Data with Vue Query
+In src/components/DataDisplay.vue, fetch data using Vue Query in the Options API:
+Edit
+<template>
+  <div>
+    <h1>Data Display</h1>
+    <div>
+      <h2>Operations</h2>
+      <div v-if="operationData.isLoading">Loading...</div>
+      <div v-else-if="operationData.isError">Error loading data!</div>
+      <div v-else>
+        <pre>{{ operationData.data }}</pre>
+      </div>
+    </div>
+
+    <div>
+      <h2>Abnormalities</h2>
+      <div v-if="abnormalitiesData.isLoading">Loading...</div>
+      <div v-else-if="abnormalitiesData.isError">Error loading data!</div>
+      <div v-else>
+        <pre>{{ abnormalitiesData.data }}</pre>
+      </div>
+    </div>
+
+    <div>
+      <h2>Replenishment Notices</h2>
+      <div v-if="replenishmentData.isLoading">Loading...</div>
+      <div v-else-if="replenishmentData.isError">Error loading data!</div>
+      <div v-else>
+        <pre>{{ replenishmentData.data }}</pre>
+      </div>
+    </div>
+
+    <button @click="refreshData">Refresh Data</button>
+  </div>
+</template>
+
+<script>
+import { useQuery } from '@tanstack/vue-query';
+import FetchAPI from '@/api/FetchAPI';
+
+export default {
+  data() {
+    return {
+      operationData: null,
+      abnormalitiesData: null,
+      replenishmentData: null,
+    };
+  },
+  methods: {
+    refreshData() {
+      this.refetchOperations();
+      this.refetchAbnormalities();
+      this.refetchReplenishment();
+    },
+  },
+  mounted() {
+    this.fetchOperations();
+    this.fetchAbnormalities();
+    this.fetchReplenishment();
+  },
+  methods: {
+    fetchOperations() {
+      const { data, refetch } = useQuery(
+        ['operations'],
+        () => FetchAPI.get('/api/get-all-operations').then((res) => res.data),
+        {
+          refetchInterval: 7000, // Poll every 7 seconds
+        }
+      );
+      this.operationData = data;
+      this.refetchOperations = refetch;
+    },
+    fetchAbnormalities() {
+      const { data, refetch } = useQuery(
+        ['abnormalities'],
+        () => FetchAPI.get('/api/get-abnormalities').then((res) => res.data),
+        {
+          staleTime: 120000, // Data remains fresh for 2 minutes
+        }
+      );
+      this.abnormalitiesData = data;
+      this.refetchAbnormalities = refetch;
+    },
+    fetchReplenishment() {
+      const { data, refetch } = useQuery(
+        ['replenishment'],
+        () => FetchAPI.get('/api/get-replenishment-notice').then((res) => res.data)
+      );
+      this.replenishmentData = data;
+      this.refetchReplenishment = refetch;
+    },
+  },
+};
+</script>
