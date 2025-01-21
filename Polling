@@ -1,0 +1,89 @@
+mounted() {
+  this.startPolling();
+},
+
+methods: {
+  startPolling() {
+    this.pollingInterval = setInterval(async () => {
+      await this.setOperationsData();
+      await this.setAbnormalitiesData();
+      await this.setReplenishmentData();
+    }, 5000); // Fetch every 5 seconds
+  },
+  beforeDestroy() {
+    clearInterval(this.pollingInterval);
+  },
+},
+-------------------
+import { shallowMount } from '@vue/test-utils';
+import ProcessInformationScreen from '@/components/pages/ProcessInformationScreen/ProcessInformationScreen.vue';
+
+// Mocking the methods for fetching data
+jest.mock('@/components/pages/ProcessInformationScreen/ProcessInformationScreen.vue', () => ({
+  ...jest.requireActual('@/components/pages/ProcessInformationScreen/ProcessInformationScreen.vue'),
+  methods: {
+    setOperationsData: jest.fn(),
+    setAbnormalitiesData: jest.fn(),
+    setReplenishmentData: jest.fn(),
+  },
+}));
+
+describe('ProcessInformationScreen Polling', () => {
+  let wrapper;
+
+  beforeEach(() => {
+    wrapper = shallowMount(ProcessInformationScreen);
+  });
+
+  it('starts polling on mounted and calls the fetch methods every 5 seconds', async () => {
+    jest.useFakeTimers(); // Use fake timers to control setInterval
+
+    // Mock the data-fetching methods to simulate async behavior
+    const setOperationsDataMock = jest.spyOn(wrapper.vm, 'setOperationsData').mockResolvedValue();
+    const setAbnormalitiesDataMock = jest.spyOn(wrapper.vm, 'setAbnormalitiesData').mockResolvedValue();
+    const setReplenishmentDataMock = jest.spyOn(wrapper.vm, 'setReplenishmentData').mockResolvedValue();
+
+    // Call mounted lifecycle hook by invoking the startPolling method
+    await wrapper.vm.startPolling();
+
+    // Check if the methods were called after 5 seconds
+    expect(setOperationsDataMock).not.toHaveBeenCalled();
+    expect(setAbnormalitiesDataMock).not.toHaveBeenCalled();
+    expect(setReplenishmentDataMock).not.toHaveBeenCalled();
+
+    // Simulate the passage of time by advancing the timers
+    jest.advanceTimersByTime(5000);
+
+    // Now check if the methods have been called after 5 seconds
+    expect(setOperationsDataMock).toHaveBeenCalled();
+    expect(setAbnormalitiesDataMock).toHaveBeenCalled();
+    expect(setReplenishmentDataMock).toHaveBeenCalled();
+
+    // Clean up the mocks
+    setOperationsDataMock.mockRestore();
+    setAbnormalitiesDataMock.mockRestore();
+    setReplenishmentDataMock.mockRestore();
+  });
+
+  it('clears the polling interval when beforeDestroy is called', () => {
+    jest.useFakeTimers(); // Use fake timers to control setInterval
+
+    // Spy on the clearInterval method
+    const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+
+    // Start polling
+    wrapper.vm.startPolling();
+
+    // Check if setInterval was called
+    expect(setInterval).toHaveBeenCalledTimes(1);
+
+    // Call beforeDestroy lifecycle hook
+    wrapper.vm.beforeDestroy();
+
+    // Check if clearInterval was called
+    expect(clearIntervalSpy).toHaveBeenCalled();
+
+    // Clean up the spy
+    clearIntervalSpy.mockRestore();
+  });
+});
