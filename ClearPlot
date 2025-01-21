@@ -1,0 +1,184 @@
+<template>
+  <div ref="plot" class="plot-container"></div>
+</template>
+
+<script>
+import Plotly from "plotly.js-dist";
+
+export default {
+  props: {
+    plotData: {
+      type: Array,
+      required: true,
+    },
+    layout: {
+      type: Object,
+      required: true,
+    },
+    config: {
+      type: Object,
+      default: () => ({}),
+    },
+    updateInterval: {
+      type: Number,
+      default: 1000, // Default update interval is 1 second
+    },
+    dynamicUpdate: {
+      type: Function,
+      default: null,
+    },
+  },
+  data() {
+    return {
+      intervalId: null,
+      index: 0,
+    };
+  },
+  mounted() {
+    this.initializePlot();
+    if (this.dynamicUpdate) {
+      this.startDynamicUpdates();
+    }
+  },
+unmounted() {
+  clearInterval(this.intervalId); // Stop the dynamic updates
+  this.clearPlot(); // Clear the Plotly instance when the component is destroyed
+},
+  methods: {
+   initializePlot() {
+     this.clearPlot();
+  const config = {
+    ...this.config, // Retain any user-defined config properties
+    scrollZoom: false,  // Disable zooming
+    displayModeBar: false,  // Disable the mode bar (which includes reset, autoscale, etc.)
+    responsive: true,  // Optional: Make the plot responsive to container resizing
+  };
+
+  Plotly.newPlot(this.$refs.plot, this.plotData, this.layout, config);
+},
+    updatePlot(traceUpdates, layoutUpdates = {}) {
+      if (traceUpdates) {
+        Plotly.extendTraces(this.$refs.plot, traceUpdates.data, traceUpdates.traces);
+      }
+      if (Object.keys(layoutUpdates).length > 0) {
+        Plotly.relayout(this.$refs.plot, layoutUpdates);
+      }
+    },
+    startDynamicUpdates() {
+      this.intervalId = setInterval(() => {
+        const updateData = this.dynamicUpdate(this.index);
+        if (updateData && this.index < 10) {
+          this.updatePlot(updateData.traceUpdates, updateData.layoutUpdates);
+          this.index++;
+        }
+      }, this.updateInterval);
+    },
+      clearPlot() {
+    if (this.$refs.plot) {
+      Plotly.purge(this.$refs.plot); // Clear the existing Plotly instance
+    }
+  },
+  },
+
+};
+</script>
+
+<style scoped>
+.plot-container {
+  width: 100%;
+  height: 500px;
+}
+</style>
+
+--------------------
+
+import { shallowMount } from "@vue/test-utils";
+import CommonPlot from "@/components/CommonPlot.vue";
+import Plotly from "plotly.js-dist";
+
+describe("CommonPlot.vue", () => {
+  let wrapper;
+
+  const mockPlotData = [
+    {
+      x: [1, 2, 3],
+      y: [10, 20, 30],
+      type: "scatter",
+    },
+  ];
+
+  const mockLayout = { title: "Test Plot" };
+  const mockConfig = { responsive: true };
+
+  beforeEach(() => {
+    wrapper = shallowMount(CommonPlot, {
+      props: {
+        plotData: mockPlotData,
+        layout: mockLayout,
+        config: mockConfig,
+      },
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    wrapper.unmount();
+  });
+
+  it("calls Plotly.newPlot on initializePlot", () => {
+    wrapper.vm.initializePlot();
+
+    expect(Plotly.newPlot).toHaveBeenCalledWith(
+      wrapper.vm.$refs.plot,
+      mockPlotData,
+      mockLayout,
+      expect.objectContaining(mockConfig)
+    );
+  });
+
+  it("calls Plotly.purge on clearPlot", () => {
+    wrapper.vm.clearPlot();
+
+    expect(Plotly.purge).toHaveBeenCalledWith(wrapper.vm.$refs.plot);
+  });
+
+  it("clears interval and purges plot on unmounted", () => {
+    const clearIntervalSpy = jest.spyOn(window, "clearInterval");
+    wrapper.vm.intervalId = 123; // Simulate an interval ID
+
+    wrapper.unmount();
+
+    expect(clearIntervalSpy).toHaveBeenCalledWith(123);
+    expect(Plotly.purge).toHaveBeenCalledWith(wrapper.vm.$refs.plot);
+  });
+
+  it("calls Plotly.extendTraces and Plotly.relayout on updatePlot", () => {
+    const traceUpdates = { data: { x: [[4]], y: [[40]] }, traces: [0] };
+    const layoutUpdates = { "xaxis.range": [0, 50] };
+
+    wrapper.vm.updatePlot(traceUpdates, layoutUpdates);
+
+    expect(Plotly.extendTraces).toHaveBeenCalledWith(
+      wrapper.vm.$refs.plot,
+      traceUpdates.data,
+      traceUpdates.traces
+    );
+    expect(Plotly.relayout).toHaveBeenCalledWith(
+      wrapper.vm.$refs.plot,
+      layoutUpdates
+    );
+  });
+
+  it("does not call Plotly.relayout if layoutUpdates is empty", () => {
+    const traceUpdates = { data: { x: [[4]], y: [[40]] }, traces: [0] };
+
+    wrapper.vm.updatePlot(traceUpdates);
+
+    expect(Plotly.extendTraces).toHaveBeenCalledWith(
+      wrapper.vm.$refs.plot,
+      traceUpdates.data,
+      traceUpdates.traces
+    );
+    expect(Plotly.relayout).not.toHaveBeenCalled();
+  });
+});
