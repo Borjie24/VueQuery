@@ -1,0 +1,290 @@
+// src/composables/useFetchData.js
+import { useQuery } from '@tanstack/vue-query';
+import { FetchAPI } from '@/utility/apiRequest';
+
+export function useFetchData(queryKey, apiUrl, refetchInterval = 7000, onSuccessCallback) {
+  // Using Vue Query to fetch data
+  const { data, error, isLoading, refetch } = useQuery(
+    queryKey,
+    () => new FetchAPI().get(apiUrl).then((res) => res.data),
+    {
+      refetchInterval, // Poll every 7 seconds by default
+      staleTime: 10000, // Cache data for 10 seconds before considering it stale
+      cacheTime: 60000, // Keep the cached data for 1 minute after it's no longer used
+      refetchOnWindowFocus: true, // Refetch data when the window is focused
+      onSuccess: (data) => {
+        if (onSuccessCallback) {
+          onSuccessCallback(data); // Execute the provided success callback
+        }
+      },
+      onError: (error) => {
+        console.error('Error fetching data:', error);
+      },
+    }
+  );
+
+  return {
+    data,
+    error,
+    isLoading,
+    refetch,
+  };
+}
+------------------------------
+<template>
+  <v-container fluid>
+    <v-row>
+      <v-col v-show="currentComponent === 'ProcessChart'" class="mb-13">
+        <ProcessChart
+          :incremented-units="incrementedUnits"
+          :non-defective-products="nonDefectiveProducts"
+          :working-rate="workingRate"
+          :operationInformation="operation_table"
+        />
+      </v-col>
+      <v-col v-show="currentComponent === 'ErrorInformation'">
+        <error-information :abnormalities="abnormalitiesData"></error-information>
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col>
+        <replenishment-notice :notice="replenishmentData"></replenishment-notice>
+      </v-col>
+    </v-row>
+  </v-container>
+</template>
+
+<script>
+import { useFetchData } from '@/composables/useFetchData'; // Import the custom hook
+import ProcessChart from '@/components/pages/ProcessInformationScreen/ProcessChart.vue';
+import ReplenishmentNotice from '@/components/pages/ProcessInformationScreen/ReplenishmentNotice.vue';
+import ErrorInformation from '@/components/pages/ProcessInformationScreen/ErrorInformation.vue';
+
+export default {
+  name: 'ProcessInformationScreen',
+  components: {
+    ProcessChart,
+    ReplenishmentNotice,
+    ErrorInformation,
+  },
+  data() {
+    return {
+      incrementedUnits: 0,
+      nonDefectiveProducts: 0,
+      workingRate: 0,
+      operation_table: [],
+      replenishmentData: [],
+      abnormalitiesData: [],
+      currentComponent: 'ProcessChart',
+    };
+  },
+  mounted() {
+    this.fetchData();
+    this.startSwitchInterval();
+  },
+  methods: {
+    fetchData() {
+      // Use the custom hook for each query, with the success callback
+      const handleOperationSuccess = (data) => {
+        this.operationInformation = data || [];
+        this.setOperationsData();
+      };
+
+      const handleAbnormalitiesSuccess = (data) => {
+        this.abnormalitiesData = data || [];
+      };
+
+      const handleReplenishmentSuccess = (data) => {
+        this.replenishmentData = data || [];
+      };
+
+      // Fetch the data with the success callbacks
+      useFetchData(['operations'], '/api/get-all-operations', 7000, handleOperationSuccess);
+      useFetchData(['abnormalities'], '/api/get-abnormalities', 7000, handleAbnormalitiesSuccess);
+      useFetchData(['replenishment'], '/api/get-replenishment-notice', 7000, handleReplenishmentSuccess);
+    },
+    setOperationsData() {
+      const lastData = this.operationInformation?.at(-1);
+      this.nonDefectiveProducts = lastData?.non_defective_products;
+      this.initializeIncrementer();
+      this.getOperationTable();
+    },
+    initializeIncrementer() {
+      if (this.operationInformation?.length > 0) {
+        const lastItem = this.operationInformation.at(-1);
+        this.incrementedUnits = lastItem.planned_number_units || 0;
+        this.startIncrementer();
+      }
+    },
+    startIncrementer() {
+      this.clearIncrementer();
+      const condition = this.operationInformation?.length > 0 && this.referenceCT !== 0;
+
+      this.incrementInterval = setInterval(async () => {
+        if (condition) {
+          this.incrementedUnits += 1;
+        }
+        await this.updatePlannedUnits();
+        await this.calculateWorkingTime();
+      }, this.referenceCT);
+    },
+    clearIncrementer() {
+      if (this.incrementInterval) {
+        clearInterval(this.incrementInterval);
+      }
+    },
+    async updatePlannedUnits() {
+      try {
+        const api = new FetchAPI();
+        const lastOperation = this.operationInformation?.at(-1);
+
+        if (lastOperation) {
+          const processId = lastOperation.process_id;
+          const payload = { planned_number_units: this.incrementedUnits };
+
+          await api.put(`/api/update-units/${processId}`, payload);
+        }
+      } catch (error) {
+        console.error('Failed to update planned number units:', error);
+      }
+    },
+    async calculateWorkingTime() {
+      this.workingRate = +((this.nonDefectiveProducts / this.incrementedUnits) * 100).toFixed(2);
+    },
+    getOperationTable() {
+      const operationInformation = this.operationInformation;
+      const operationInformation_map = operationInformation?.map(
+        (filObj) =>
+          new Object({
+            process_id: filObj.process_id,
+            process_name: filObj.process_name,
+            product_number: this.formatProductNumber(filObj.product_number),
+            facility_cycle_time: filObj.facility_cycle_time.toFixed(2),
+          })
+      );
+
+      this.operation_table = operationInformation_map;
+    },
+    formatProductNumber(number) {
+      const defaultFill = '0000';
+      if (String(number).length === 5) {
+        return '9999';
+      }
+      return (defaultFill + number).substr(-4);
+    },
+    startSwitchInterval() {
+      const intervals = [
+        { component: 'ProcessChart', duration: 7000 },
+        { component: 'ErrorInformation', duration: 7000 },
+      ];
+
+      let index = 0;
+      const switchComponent = () => {
+        this.currentComponent = intervals[index].component;
+        setTimeout(() => {
+          index = (index + 1) % intervals.length;
+          switchComponent();
+        }, intervals[index].duration);
+      };
+
+      switchComponent();
+    },
+  },
+};
+</script>
+---------------------------
+import { shallowMount } from '@vue/test-utils';
+import ProcessInformationScreen from '@/components/pages/ProcessInformationScreen/ProcessInformationScreen.vue';
+import { useFetchData } from '@/composables/useFetchData'; // Import the custom hook
+import { FetchAPI } from '@/utility/apiRequest';
+
+// Mock the `useFetchData` hook
+jest.mock('@/composables/useFetchData', () => ({
+  useFetchData: jest.fn(),
+}));
+
+// Mock the FetchAPI to avoid real API calls
+jest.mock('@/utility/apiRequest', () => ({
+  FetchAPI: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    put: jest.fn(),
+  })),
+}));
+
+describe('ProcessInformationScreen', () => {
+  let wrapper;
+
+  beforeEach(() => {
+    // Mock the data returned by useFetchData
+    useFetchData.mockImplementation((queryKey, apiUrl, refetchInterval, onSuccessCallback) => {
+      // Mock the response data based on the API URL
+      const mockData = {
+        '/api/get-all-operations': [
+          { process_id: 1, process_name: 'Process 1', product_number: 100, non_defective_products: 50, planned_number_units: 200 },
+        ],
+        '/api/get-abnormalities': [{ id: 1, description: 'Abnormality 1' }],
+        '/api/get-replenishment-notice': [{ id: 1, message: 'Replenishment Needed' }],
+      };
+
+      // Call the success callback with the mock data
+      onSuccessCallback(mockData[apiUrl]);
+
+      return {
+        data: mockData[apiUrl],
+        isLoading: false,
+        error: null,
+        refetch: jest.fn(),
+      };
+    });
+
+    // Shallow mount the component (this does not render child components)
+    wrapper = shallowMount(ProcessInformationScreen);
+  });
+
+  it('fetches and processes data correctly on mount', async () => {
+    // Check if the data was fetched correctly and if the success callback was called
+    expect(useFetchData).toHaveBeenCalledTimes(3); // It should have been called 3 times (for 3 APIs)
+    expect(wrapper.vm.operationInformation).toEqual([
+      { process_id: 1, process_name: 'Process 1', product_number: 100, non_defective_products: 50, planned_number_units: 200 },
+    ]);
+    expect(wrapper.vm.abnormalitiesData).toEqual([{ id: 1, description: 'Abnormality 1' }]);
+    expect(wrapper.vm.replenishmentData).toEqual([{ id: 1, message: 'Replenishment Needed' }]);
+  });
+
+  it('updates state correctly when new data is fetched', async () => {
+    // Simulate data fetching
+    await wrapper.vm.fetchData();
+
+    // Ensure that the component’s state has been updated with the mock data
+    expect(wrapper.vm.operationInformation).toEqual([
+      { process_id: 1, process_name: 'Process 1', product_number: 100, non_defective_products: 50, planned_number_units: 200 },
+    ]);
+    expect(wrapper.vm.abnormalitiesData).toEqual([{ id: 1, description: 'Abnormality 1' }]);
+    expect(wrapper.vm.replenishmentData).toEqual([{ id: 1, message: 'Replenishment Needed' }]);
+  });
+
+  it('renders the correct components based on the currentComponent', async () => {
+    // Test if the ProcessChart component is rendered by default
+    expect(wrapper.findComponent({ name: 'ProcessChart' }).exists()).toBe(false); // It should not render ProcessChart because of shallowMount
+    expect(wrapper.findComponent({ name: 'ErrorInformation' }).exists()).toBe(false); // It should not render ErrorInformation either
+
+    // Change the currentComponent to 'ErrorInformation'
+    await wrapper.setData({ currentComponent: 'ErrorInformation' });
+
+    // Check if the correct component is rendered
+    expect(wrapper.findComponent({ name: 'ProcessChart' }).exists()).toBe(false);
+    expect(wrapper.findComponent({ name: 'ErrorInformation' }).exists()).toBe(false);
+  });
+
+  it('calls updatePlannedUnits when incrementedUnits is updated', async () => {
+    // Mock the updatePlannedUnits method
+    const updatePlannedUnitsSpy = jest.spyOn(wrapper.vm, 'updatePlannedUnits').mockImplementation(() => {});
+
+    // Change incrementedUnits to trigger the update
+    await wrapper.setData({ incrementedUnits: 10 });
+
+    // Check if updatePlannedUnits was called
+    expect(updatePlannedUnitsSpy).toHaveBeenCalled();
+  });
+});
