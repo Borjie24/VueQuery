@@ -1,0 +1,353 @@
+Install Vue Query
+In your project directory, run the following command to install @tanstack/vue-query:
+
+npm install @tanstack/vue-query
+
+Setup Query Client
+
+import { createApp } from 'vue';
+import { VueQueryPlugin, QueryClient } from '@tanstack/vue-query';
+import App from './App.vue';
+
+const queryClient = new QueryClient();
+
+createApp(App)
+  .use(VueQueryPlugin, { queryClient })
+  .mount('#app');
+
+Fetch Data with Vue Query in Options API
+Use the useQuery inside the data function of your component.
+
+<template>
+  <v-container fluid>
+    <v-row>
+      <v-col v-show="currentComponent === 'ProcessChart'" class="mb-13">
+        <ProcessChart
+          :incremented-units="incrementedUnits"
+          :non-defective-products="nonDefectiveProducts"
+          :working-rate="workingRate"
+          :operationInformation="operation_table"
+        />
+      </v-col>
+      <v-col v-show="currentComponent === 'ErrorInformation'">
+        <error-information :abnormalities="abnormalitiesData"></error-information>
+      </v-col>
+    </v-row>
+
+    <v-row>
+      <v-col>
+        <replenishment-notice :notice="replenishmentData"></replenishment-notice>
+      </v-col>
+    </v-row>
+  </v-container>
+</template>
+
+<script>
+import { useQuery } from '@tanstack/vue-query';
+import ProcessChart from '@/components/pages/ProcessInformationScreen/ProcessChart.vue';
+import ReplenishmentNotice from '@/components/pages/ProcessInformationScreen/ReplenishmentNotice.vue';
+import ErrorInformation from '@/components/pages/ProcessInformationScreen/ErrorInformation.vue';
+import { FetchAPI } from '@/utility/apiRequest';
+
+export default {
+  name: 'ProcessInformationScreen',
+  components: {
+    ProcessChart,
+    ReplenishmentNotice,
+    ErrorInformation,
+  },
+  data() {
+    return {
+      referenceCT: 0,
+      operationInformation: [],
+      incrementedUnits: 0,
+      incrementInterval: null,
+      nonDefectiveProducts: 0,
+      workingRate: 0,
+      operation_table: [],
+      replenishmentData: [],
+      abnormalitiesData: [],
+      currentComponent: 'ProcessChart',
+    };
+  },
+  mounted() {
+    // Fetch the data and set up polling here
+    this.fetchData();
+    this.startSwitchInterval();
+  },
+  methods: {
+    // Fetch all data using Vue Query
+    fetchData() {
+      // Using Vue Query to fetch operations
+      const { data: operationData } = useQuery(
+        ['operations'],
+        () => new FetchAPI().get('/api/get-all-operations').then((res) => res.data),
+        {
+          refetchInterval: 7000, // Poll every 7 seconds
+          onSuccess: (data) => {
+            this.operationInformation = data || [];
+            this.setOperationsData();
+          },
+          onError: (error) => {
+            console.error('Error fetching operations data:', error);
+          },
+        }
+      );
+      
+      const { data: abnormalitiesData } = useQuery(
+        ['abnormalities'],
+        () => new FetchAPI().get('/api/get-abnormalities').then((res) => res.data),
+        {
+          refetchInterval: 7000, // Poll every 7 seconds
+          onSuccess: (data) => {
+            this.abnormalitiesData = data || [];
+          },
+          onError: (error) => {
+            console.error('Error fetching abnormalities data:', error);
+          },
+        }
+      );
+      
+      const { data: replenishmentData } = useQuery(
+        ['replenishment'],
+        () => new FetchAPI().get('/api/get-replenishment-notice').then((res) => res.data),
+        {
+          refetchInterval: 7000, // Poll every 7 seconds
+          onSuccess: (data) => {
+            this.replenishmentData = data || [];
+          },
+          onError: (error) => {
+            console.error('Error fetching replenishment data:', error);
+          },
+        }
+      );
+    },
+    startSwitchInterval() {
+      const intervals = [
+        { component: 'ProcessChart', duration: 7000 },
+        { component: 'ErrorInformation', duration: 7000 },
+      ];
+
+      let index = 0;
+      const switchComponent = () => {
+        this.currentComponent = intervals[index].component;
+        setTimeout(() => {
+          index = (index + 1) % intervals.length;
+          switchComponent();
+        }, intervals[index].duration);
+      };
+
+      switchComponent();
+    },
+    setOperationsData() {
+      const lastData = this.operationInformation?.at(-1);
+      this.nonDefectiveProducts = lastData?.non_defective_products;
+      this.initializeIncrementer();
+      this.getOperationTable();
+    },
+    initializeIncrementer() {
+      if (this.operationInformation?.length > 0) {
+        const lastItem = this.operationInformation.at(-1);
+        this.incrementedUnits = lastItem.planned_number_units || 0;
+        this.startIncrementer();
+      }
+    },
+    startIncrementer() {
+      this.clearIncrementer();
+      const condition = this.operationInformation?.length > 0 && this.referenceCT !== 0;
+
+      this.incrementInterval = setInterval(async () => {
+        if (condition) {
+          this.incrementedUnits += 1;
+        }
+        await this.updatePlannedUnits();
+        await this.calculateWorkingTime();
+      }, this.referenceCT);
+    },
+    clearIncrementer() {
+      if (this.incrementInterval) {
+        clearInterval(this.incrementInterval);
+      }
+    },
+    async updatePlannedUnits() {
+      try {
+        const api = new FetchAPI();
+        const lastOperation = this.operationInformation?.at(-1);
+
+        if (lastOperation) {
+          const processId = lastOperation.process_id;
+          const payload = { planned_number_units: this.incrementedUnits };
+
+          await api.put(`/api/update-units/${processId}`, payload);
+        }
+      } catch (error) {
+        console.error('Failed to update planned number units:', error);
+      }
+    },
+    async calculateWorkingTime() {
+      this.workingRate = +((this.nonDefectiveProducts / this.incrementedUnits) * 100).toFixed(2);
+    },
+    getOperationTable() {
+      const operationInformation = this.operationInformation;
+      const operationInformation_map = operationInformation?.map(
+        (filObj) =>
+          new Object({
+            process_id: filObj.process_id,
+            process_name: filObj.process_name,
+            product_number: this.formatProductNumber(filObj.product_number),
+            facility_cycle_time: filObj.facility_cycle_time.toFixed(2),
+          })
+      );
+
+      this.operation_table = operationInformation_map;
+    },
+    formatProductNumber(number) {
+      const defaultFill = '0000';
+      if (String(number).length === 5) {
+        return '9999';
+      }
+      return (defaultFill + number).substr(-4);
+    },
+  },
+};
+</script>
+--------------------------------------
+
+import { mount } from '@vue/test-utils';
+import ProcessInformationScreen from '@/components/pages/ProcessInformationScreen/ProcessInformationScreen.vue';
+import { useQuery } from '@tanstack/vue-query';
+import { FetchAPI } from '@/utility/apiRequest';
+
+// Mock `useQuery` and `FetchAPI`
+jest.mock('@tanstack/vue-query', () => ({
+  useQuery: jest.fn(),
+}));
+
+jest.mock('@/utility/apiRequest', () => ({
+  FetchAPI: jest.fn().mockImplementation(() => ({
+    get: jest.fn(),
+    put: jest.fn(),
+  })),
+}));
+
+describe('ProcessInformationScreen', () => {
+  let mockGet;
+
+  beforeEach(() => {
+    mockGet = jest.fn();
+    FetchAPI.mockImplementation(() => ({
+      get: mockGet,
+      put: jest.fn(),
+    }));
+
+    useQuery.mockClear();
+  });
+
+  it('should render the component and fetch data', async () => {
+    // Mock API responses
+    const operationData = [
+      { process_id: 1, process_name: 'Process 1', product_number: 100, facility_cycle_time: 1.5 },
+    ];
+    const abnormalitiesData = [{ id: 1, description: 'Error' }];
+    const replenishmentData = [{ id: 1, notice: 'Replenishment needed' }];
+
+    useQuery.mockImplementationOnce(() => ({
+      data: operationData,
+      isLoading: false,
+      error: null,
+    }));
+    useQuery.mockImplementationOnce(() => ({
+      data: abnormalitiesData,
+      isLoading: false,
+      error: null,
+    }));
+    useQuery.mockImplementationOnce(() => ({
+      data: replenishmentData,
+      isLoading: false,
+      error: null,
+    }));
+
+    const wrapper = mount(ProcessInformationScreen);
+
+    // Assert the component renders correctly
+    expect(wrapper.exists()).toBe(true);
+
+    // Wait for the component to update with the data
+    await wrapper.vm.$nextTick();
+
+    // Check if data is correctly rendered (based on your template)
+    expect(wrapper.text()).toContain('Process 1');
+    expect(wrapper.text()).toContain('Error');
+    expect(wrapper.text()).toContain('Replenishment needed');
+  });
+
+  it('should handle polling and refetch data every 7 seconds', async () => {
+    jest.useFakeTimers();
+
+    const operationData = [
+      { process_id: 1, process_name: 'Process 1', product_number: 100, facility_cycle_time: 1.5 },
+    ];
+    const abnormalitiesData = [{ id: 1, description: 'Error' }];
+    const replenishmentData = [{ id: 1, notice: 'Replenishment needed' }];
+
+    useQuery.mockImplementationOnce(() => ({
+      data: operationData,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    useQuery.mockImplementationOnce(() => ({
+      data: abnormalitiesData,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    useQuery.mockImplementationOnce(() => ({
+      data: replenishmentData,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+
+    const wrapper = mount(ProcessInformationScreen);
+
+    // Simulate the component mounted
+    await wrapper.vm.$nextTick();
+
+    // Check that polling starts (by checking refetch function)
+    expect(useQuery.mock.calls[0][2].refetchInterval).toBe(7000);
+    expect(useQuery.mock.calls[1][2].refetchInterval).toBe(7000);
+    expect(useQuery.mock.calls[2][2].refetchInterval).toBe(7000);
+
+    // Fast forward time by 7 seconds to trigger the polling
+    jest.advanceTimersByTime(7000);
+
+    // Ensure refetch was called
+    expect(useQuery.mock.calls[0][2].refetch).toHaveBeenCalled();
+    expect(useQuery.mock.calls[1][2].refetch).toHaveBeenCalled();
+    expect(useQuery.mock.calls[2][2].refetch).toHaveBeenCalled();
+
+    // Clean up fake timers
+    jest.useRealTimers();
+  });
+
+  it('should handle errors when fetching data', async () => {
+    // Mock API to return error
+    useQuery.mockImplementationOnce(() => ({
+      data: null,
+      isLoading: false,
+      error: 'Failed to fetch data',
+    }));
+
+    const wrapper = mount(ProcessInformationScreen);
+
+    // Assert the component renders correctly
+    expect(wrapper.exists()).toBe(true);
+
+    // Wait for the component to update with the error
+    await wrapper.vm.$nextTick();
+
+    // Check if error is handled correctly
+    expect(wrapper.text()).toContain('Failed to fetch data');
+  });
+});
