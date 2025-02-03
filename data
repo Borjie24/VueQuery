@@ -1,0 +1,222 @@
+<template>
+  <div>
+    <div class="buttons">
+      <button @click="setTimeframe('hourly')">Hourly</button>
+      <button @click="setTimeframe('daily')">Daily</button>
+      <button @click="setTimeframe('monthly')">Monthly</button>
+      <button @click="setTimeframe('yearly')">Yearly</button>
+    </div>
+    <div ref="plotlyChart" style="width: 100%; height: 500px;" v-if="selectedTimeframe"></div>
+  </div>
+</template>
+
+<script>
+import Plotly from 'plotly.js-dist';
+
+export default {
+  data() {
+    return {
+      dataset: [
+        {"datetime": "2025-02-02 00:00", "actual": 946, "plan": 991},
+        {"datetime": "2025-02-02 01:00", "actual": 960, "plan": 939},
+        {"datetime": "2025-02-02 02:00", "actual": 1050, "plan": 1002},
+        {"datetime": "2025-02-02 03:00", "actual": 1009, "plan": 933},
+        {"datetime": "2025-02-02 04:00", "actual": 1087, "plan": 1018},
+        {"datetime": "2025-02-02 05:00", "actual": 1021, "plan": 975},
+        {"datetime": "2025-02-02 06:00", "actual": 1126, "plan": 1036},
+        {"datetime": "2025-02-02 07:00", "actual": 994, "plan": 1009},
+        {"datetime": "2025-02-02 08:00", "actual": 851, "plan": 946},
+        {"datetime": "2025-02-02 09:00", "actual": 933, "plan": 1018},
+        {"datetime": "2025-02-02 10:00", "actual": 955, "plan": 908},
+        {"datetime": "2025-02-02 11:00", "actual": 928, "plan": 945},
+        {"datetime": "2025-02-02 12:00", "actual": 868, "plan": 943},
+        {"datetime": "2025-02-02 13:00", "actual": 912, "plan": 984},
+        {"datetime": "2025-02-02 14:00", "actual": 1123, "plan": 1093},
+        {"datetime": "2025-02-02 15:00", "actual": 911, "plan": 900},
+        {"datetime": "2025-02-02 16:00", "actual": 1165, "plan": 1079},
+        {"datetime": "2025-02-02 17:00", "actual": 956, "plan": 908},
+        {"datetime": "2025-02-02 18:00", "actual": 1013, "plan": 920},
+        {"datetime": "2025-02-02 19:00", "actual": 937, "plan": 933},
+        {"datetime": "2025-02-02 20:00", "actual": 950, "plan": 1026},
+        {"datetime": "2025-02-02 21:00", "actual": 1106, "plan": 1012},
+        {"datetime": "2025-02-02 22:00", "actual": 830, "plan": 927},
+        {"datetime": "2025-02-02 23:00", "actual": 1093, "plan": 1067},
+      ],
+      selectedTimeframe: 'hourly'
+    };
+  },
+  mounted() {
+    this.renderChart();
+  },
+  methods: {
+    setTimeframe(timeframe) {
+    this.selectedTimeframe = timeframe;
+    this.renderChart();
+  },
+  processDailyData() {
+  const dailyData = {};
+  let totalPlanForReferenceDay = 0;
+
+  // Calculate the total plan for 2025-02-02
+  this.dataset.forEach(({ datetime, plan }) => {
+    if (datetime.startsWith('2025-02-02')) {
+      totalPlanForReferenceDay += plan;
+    }
+  });
+
+  // Aggregate actual and plan values per day
+  this.dataset.forEach(({ datetime, actual, plan }) => {
+    const date = datetime.split(' ')[0];
+    if (!dailyData[date]) {
+      dailyData[date] = { actual: 0, plan: 0 };
+    }
+    dailyData[date].actual += actual;
+    dailyData[date].plan += plan;
+  });
+
+  // Generate a full month of February (1-28)
+  const dailyResults = [];
+  for (let day = 1; day <= 28; day++) {
+    const formattedDay = `2025-02-${day.toString().padStart(2, '0')}`;
+    dailyResults.push({
+      date: formattedDay,
+      actual: dailyData[formattedDay]?.actual || 0, // Default actual to 0 if no data
+      plan: dailyData[formattedDay]?.plan || totalPlanForReferenceDay // Use the total plan of 2025-02-02
+    });
+  }
+
+  return dailyResults;
+},
+processMonthlyData() {
+  const monthlyData = {};
+  let lastAvailablePlan = 0;
+
+  // Aggregate actual and plan values per month
+  this.dataset.forEach(({ datetime, actual, plan }) => {
+    const month = datetime.split('-').slice(0, 2).join('-'); // Extract YYYY-MM (e.g., "2025-02")
+    if (!monthlyData[month]) {
+      monthlyData[month] = { actual: 0, plan: 0 };
+    }
+    monthlyData[month].actual += actual;
+    monthlyData[month].plan += plan;
+    lastAvailablePlan = monthlyData[month].plan; // Store last available plan
+  });
+
+  // Ensure all months from JAN - DEC are in the result
+  const monthlyResults = [];
+  for (let month = 1; month <= 12; month++) {
+    const formattedMonth = `2025-${month.toString().padStart(2, '0')}`;
+    monthlyResults.push({
+      month: formattedMonth,
+      actual: monthlyData[formattedMonth]?.actual || 0, // Default actual to 0 if missing
+      plan: monthlyData[formattedMonth]?.plan || lastAvailablePlan // Use last available month's plan
+    });
+  }
+
+  return monthlyResults;
+},
+
+processYearlyData() {
+  const yearlyData = {};
+  let lastAvailablePlan = 0;
+
+  // Aggregate actual and plan values per year
+  this.dataset.forEach(({ datetime, actual, plan }) => {
+    const year = datetime.split('-')[0]; // Extract YYYY (e.g., "2025")
+    if (!yearlyData[year]) {
+      yearlyData[year] = { actual: 0, plan: 0 };
+    }
+    yearlyData[year].actual += actual;
+    yearlyData[year].plan += plan;
+    lastAvailablePlan = yearlyData[year].plan; // Store last available plan
+  });
+
+  // Ensure all years from 2021 to 2025 are included
+  const yearlyResults = [];
+  for (let year = 2021; year <= 2025; year++) {
+    const yearStr = year.toString();
+    yearlyResults.push({
+      year: yearStr,
+      actual: yearlyData[yearStr]?.actual || 0, // Default actual to 0 if missing
+      plan: yearlyData[yearStr]?.plan || lastAvailablePlan // Use last available year's plan
+    });
+  }
+
+  return yearlyResults;
+},
+
+
+ renderChart() {
+  let xValues = [];
+  let actualValues = [];
+  let planValues = [];
+
+  if (this.selectedTimeframe === 'hourly') {
+    xValues = this.dataset.map(item => item.datetime.split(' ')[1]);
+    actualValues = this.dataset.map(item => item.actual);
+    planValues = this.dataset.map(item => item.plan);
+  } else if (this.selectedTimeframe === 'daily') {
+    const dailyData = this.processDailyData();
+    xValues = dailyData.map(item => item.date.split('-')[2]); // Day of the month
+    actualValues = dailyData.map(item => item.actual);
+    planValues = dailyData.map(item => item.plan);
+  } else if (this.selectedTimeframe === 'monthly') {
+    const monthlyData = this.processMonthlyData();
+    xValues = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+    actualValues = monthlyData.map(item => item.actual);
+    planValues = monthlyData.map(item => item.plan);
+  } else if (this.selectedTimeframe === 'yearly') {
+    const yearlyData = this.processYearlyData();
+    xValues = ["2021", "2022", "2023", "2024", "2025"];
+    actualValues = yearlyData.map(item => item.actual);
+    planValues = yearlyData.map(item => item.plan);
+  }
+
+  const actualTrace = {
+    x: xValues,
+    y: actualValues,
+    type: 'bar',
+    name: 'Actual',
+    marker: { color: 'blue' }
+  };
+
+  const planTrace = {
+    x: xValues,
+    y: planValues,
+    type: 'scatter',
+    mode: 'lines+markers',
+    name: 'Planned',
+    line: { color: 'red' }
+  };
+
+  const layout = {
+    title: 'Electricity Consumption (Actual vs Planned)',
+    xaxis: { title: this.selectedTimeframe === 'hourly' ? 'Time (Military)' : this.selectedTimeframe === 'daily' ? 'Day of Month' : this.selectedTimeframe === 'monthly' ? 'Month' : 'Year', tickmode: 'linear' },
+    yaxis: { title: 'Consumption' },
+    barmode: 'group'
+  };
+
+  Plotly.newPlot(this.$refs.plotlyChart, [actualTrace, planTrace], layout);
+}
+
+
+}
+};
+</script>
+
+<style>
+.buttons {
+  margin-bottom: 10px;
+}
+.buttons button {
+  margin-right: 5px;
+  padding: 10px;
+  border: none;
+  background-color: #007bff;
+  color: white;
+  cursor: pointer;
+}
+.buttons button:hover {
+  background-color: #0056b3;
+}
+</style>
