@@ -1,0 +1,81 @@
+<template>
+  <div class="container-fluid mt-3">
+    <!-- Top buttons -->
+    <div class="d-flex justify-content-start mb-3">
+      <button class="btn btn-outline-dark me-3">Button</button>
+      <div class="d-flex">
+        <button class="btn btn-outline-dark me-2 big-btn">BIG BUTTON</button>
+        <button class="btn btn-outline-dark me-2 big-btn">BIG BUTTON</button>
+        <button class="btn btn-outline-dark me-2 big-btn">BIG BUTTON</button>
+        <button class="btn btn-outline-dark big-btn">BIG BUTTON</button>
+      </div>
+    </div>
+
+    <!-- Graph sections -->
+    <div class="row main-content">
+      <div class="col-md-8 d-flex flex-column">
+        <div ref="plotGraph" class="border p-3 graph-box flex-grow-1"></div>
+        <div class="text-center mt-2">
+          <button class="btn btn-outline-dark bottom-btn">BUTTON</button>
+        </div>
+      </div>
+      <div class="col-md-4 d-flex flex-column">
+        <div ref="plotlyGraph1" class="border p-3 graph-box"></div>
+        <div ref="plotlyGraph2" class="border p-3 graph-box mt-3"></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import Plotly from 'plotly.js-dist';
+
+export default {
+  mounted() {
+    this.drawPlots();
+    window.addEventListener('resize', this.resizePlots);
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.resizePlots);
+  },
+  methods: {
+    drawPlots() {
+      const layout = { title: 'Plotly Graph', responsive: true };
+      const data = [{ x: [1, 2, 3, 4], y: [10, 15, 13, 17], type: 'scatter' }];
+
+      Plotly.newPlot(this.$refs.plotGraph, data, layout);
+      Plotly.newPlot(this.$refs.plotlyGraph1, data, layout);
+      Plotly.newPlot(this.$refs.plotlyGraph2, data, layout);
+    },
+    resizePlots() {
+      Plotly.Plots.resize(this.$refs.plotGraph);
+      Plotly.Plots.resize(this.$refs.plotlyGraph1);
+      Plotly.Plots.resize(this.$refs.plotlyGraph2);
+    }
+  }
+};
+</script>
+
+<style scoped>
+.big-btn {
+  width: 120px;
+  height: 80px;
+}
+
+.main-content {
+  height: 80vh; /* Make graphs take most of the screen height */
+}
+
+.graph-box {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-btn {
+  width: 100%;
+  max-width: 300px;
+}
+</style>
