@@ -1,0 +1,198 @@
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Get the latest date
+latest_date = session.query(func.max(ElectricityData.date)).scalar()
+
+# Query 24-hour time, Plan, and Actual data separately for the latest date
+if latest_date:
+    # Query for Plan values
+    plan_data = session.query(
+        ElectricityData.time, ElectricityData.plan
+    ).filter(
+        ElectricityData.date == latest_date
+    ).order_by(
+        ElectricityData.time
+    ).all()
+
+    # Query for Actual values
+    actual_data = session.query(
+        ElectricityData.time, ElectricityData.actual
+    ).filter(
+        ElectricityData.date == latest_date
+    ).order_by(
+        ElectricityData.time
+    ).all()
+
+    # Convert results to dictionaries or lists
+    plan_dict = {time: plan for time, plan in plan_data}
+    actual_dict = {time: actual for time, actual in actual_data}
+
+    print("Plan Data:", plan_dict)
+    print("Actual Data:", actual_dict)
+
+session.close()
+---------------------------
+
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, extract
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Get the latest month and year from the database
+latest_year, latest_month = session.query(
+    func.extract('year', func.max(ElectricityData.date)),
+    func.extract('month', func.max(ElectricityData.date))
+).first()
+
+# Query for daily total Plan and Actual values separately
+if latest_year and latest_month:
+    # Total Plan per day
+    plan_totals = session.query(
+        ElectricityData.date,
+        func.sum(ElectricityData.plan).label("total_plan")
+    ).filter(
+        extract('year', ElectricityData.date) == latest_year,
+        extract('month', ElectricityData.date) == latest_month
+    ).group_by(
+        ElectricityData.date
+    ).order_by(
+        ElectricityData.date
+    ).all()
+
+    # Total Actual per day
+    actual_totals = session.query(
+        ElectricityData.date,
+        func.sum(ElectricityData.actual).label("total_actual")
+    ).filter(
+        extract('year', ElectricityData.date) == latest_year,
+        extract('month', ElectricityData.date) == latest_month
+    ).group_by(
+        ElectricityData.date
+    ).order_by(
+        ElectricityData.date
+    ).all()
+
+    # Convert results to dictionaries
+    plan_dict = {date: total_plan for date, total_plan in plan_totals}
+    actual_dict = {date: total_actual for date, total_actual in actual_totals}
+
+    print("Daily Plan Totals:", plan_dict)
+    print("Daily Actual Totals:", actual_dict)
+
+session.close()
+---------------------
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, extract, case
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Determine the latest fiscal year based on the most recent date
+latest_date = session.query(func.max(ElectricityData.date)).scalar()
+
+if latest_date:
+    latest_year = latest_date.year
+    latest_month = latest_date.month
+
+    # Determine the fiscal year start and end
+    if latest_month < 4:  # If Jan-Mar, fiscal year is last year's April to this year's March
+        fiscal_start_year = latest_year - 1
+        fiscal_end_year = latest_year
+    else:  # If Apr-Dec, fiscal year is this year's April to next year's March
+        fiscal_start_year = latest_year
+        fiscal_end_year = latest_year + 1
+
+    fiscal_start = f"{fiscal_start_year}-04-01"
+    fiscal_end = f"{fiscal_end_year}-03-31"
+
+    # Query for total Plan per month
+    plan_totals = session.query(
+        extract('year', ElectricityData.date),  # Year for grouping
+        extract('month', ElectricityData.date),  # Month for grouping
+        func.sum(ElectricityData.plan).label("total_plan")
+    ).filter(
+        ElectricityData.date >= fiscal_start,
+        ElectricityData.date <= fiscal_end
+    ).group_by(
+        extract('year', ElectricityData.date),
+        extract('month', ElectricityData.date)
+    ).order_by(
+        extract('year', ElectricityData.date),
+        extract('month', ElectricityData.date)
+    ).all()
+
+    # Query for total Actual per month
+    actual_totals = session.query(
+        extract('year', ElectricityData.date),
+        extract('month', ElectricityData.date),
+        func.sum(ElectricityData.actual).label("total_actual")
+    ).filter(
+        ElectricityData.date >= fiscal_start,
+        ElectricityData.date <= fiscal_end
+    ).group_by(
+        extract('year', ElectricityData.date),
+        extract('month', ElectricityData.date)
+    ).order_by(
+        extract('year', ElectricityData.date),
+        extract('month', ElectricityData.date)
+    ).all()
+
+    # Convert results to dictionaries
+    plan_dict = {f"{int(year)}-{int(month):02d}": total_plan for year, month, total_plan in plan_totals}
+    actual_dict = {f"{int(year)}-{int(month):02d}": total_actual for year, month, total_actual in actual_totals}
+
+    print("Monthly Plan Totals for Fiscal Year:", plan_dict)
+    print("Monthly Actual Totals for Fiscal Year:", actual_dict)
+
+session.close()
+-----------------------------
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, extract
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Get the latest year in the database
+latest_year = session.query(func.extract('year', func.max(ElectricityData.date))).scalar()
+
+# Query total yearly Plan and Actual values
+if latest_year:
+    # Total Plan for the latest year
+    total_plan = session.query(
+        func.sum(ElectricityData.plan)
+    ).filter(
+        extract('year', ElectricityData.date) == latest_year
+    ).scalar()
+
+    # Total Actual for the latest year
+    total_actual = session.query(
+        func.sum(ElectricityData.actual)
+    ).filter(
+        extract('year', ElectricityData.date) == latest_year
+    ).scalar()
+
+    print(f"Total Plan for {int(latest_year)}: {total_plan}")
+    print(f"Total Actual for {int(latest_year)}: {total_actual}")
+
+session.close()
