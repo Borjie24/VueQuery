@@ -55,3 +55,110 @@ if latest_year and latest_month:
     print("Actual Values:", actual_values)
 
 session.close()
+-------------------
+from sqlalchemy.orm import sessionmaker 
+from sqlalchemy import create_engine, func, extract, case
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Determine the latest fiscal year based on extracted_datetime
+latest_date = session.query(func.max(ElectricityData.extracted_datetime)).scalar()
+
+if latest_date:
+    latest_year = latest_date.year
+    latest_month = latest_date.month
+
+    # Determine the fiscal year start and end
+    if latest_month < 4:  # If Jan-Mar, fiscal year is last year's April to this year's March
+        fiscal_start_year = latest_year - 1
+        fiscal_end_year = latest_year
+    else:  # If Apr-Dec, fiscal year is this year's April to next year's March
+        fiscal_start_year = latest_year
+        fiscal_end_year = latest_year + 1
+
+    fiscal_start = f"{fiscal_start_year}-04-01 00:00:00"
+    fiscal_end = f"{fiscal_end_year}-03-31 23:59:59"
+
+    # Query for total Plan values per month
+    plan_values = [
+        total_plan for total_plan, in session.query(
+            func.sum(ElectricityData.value)
+        ).filter(
+            ElectricityData.extracted_datetime >= fiscal_start,
+            ElectricityData.extracted_datetime <= fiscal_end,
+            ElectricityData.data_name == "plan",
+            ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+        ).group_by(
+            extract('year', ElectricityData.extracted_datetime),
+            extract('month', ElectricityData.extracted_datetime)
+        ).order_by(
+            extract('year', ElectricityData.extracted_datetime),
+            extract('month', ElectricityData.extracted_datetime)
+        ).all()
+    ]
+
+    # Query for total Actual values per month
+    actual_values = [
+        total_actual for total_actual, in session.query(
+            func.sum(ElectricityData.value)
+        ).filter(
+            ElectricityData.extracted_datetime >= fiscal_start,
+            ElectricityData.extracted_datetime <= fiscal_end,
+            ElectricityData.data_name == "actual",
+            ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+        ).group_by(
+            extract('year', ElectricityData.extracted_datetime),
+            extract('month', ElectricityData.extracted_datetime)
+        ).order_by(
+            extract('year', ElectricityData.extracted_datetime),
+            extract('month', ElectricityData.extracted_datetime)
+        ).all()
+    ]
+
+    print("Plan Values per Month:", plan_values)
+    print("Actual Values per Month:", actual_values)
+
+session.close()
+----------------
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, extract
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Get the latest year in the database
+latest_year = session.query(func.extract('year', func.max(ElectricityData.extracted_datetime))).scalar()
+
+# Query total yearly Plan and Actual values
+if latest_year:
+    # Total Plan for the latest year
+    total_plan = session.query(
+        func.sum(ElectricityData.value)
+    ).filter(
+        extract('year', ElectricityData.extracted_datetime) == latest_year,
+        ElectricityData.data_name == "plan",
+        ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+    ).scalar() or 0  # Default to 0 if no data
+
+    # Total Actual for the latest year
+    total_actual = session.query(
+        func.sum(ElectricityData.value)
+    ).filter(
+        extract('year', ElectricityData.extracted_datetime) == latest_year,
+        ElectricityData.data_name == "actual",
+        ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+    ).scalar() or 0  # Default to 0 if no data
+
+    print(f"Total Plan for {int(latest_year)}: {total_plan}")
+    print(f"Total Actual for {int(latest_year)}: {total_actual}")
+
+session.close()
