@@ -1,0 +1,57 @@
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, func, extract, cast, Date
+from your_model import ElectricityData  # Import your SQLAlchemy model
+
+# Database connection
+DATABASE_URL = "postgresql://user:password@localhost:5432/your_database"
+engine = create_engine(DATABASE_URL)
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Get the latest month and year from the database based on extracted_datetime
+latest_year, latest_month = session.query(
+    func.extract('year', func.max(ElectricityData.extracted_datetime)),
+    func.extract('month', func.max(ElectricityData.extracted_datetime))
+).first()
+
+# Query for daily total Plan and Actual values separately
+plan_values = []
+actual_values = []
+
+if latest_year and latest_month:
+    # Get Plan values
+    plan_values = [
+        total_plan for total_plan, in session.query(
+            func.sum(ElectricityData.value)
+        ).filter(
+            extract('year', ElectricityData.extracted_datetime) == latest_year,
+            extract('month', ElectricityData.extracted_datetime) == latest_month,
+            ElectricityData.data_name == "plan",
+            ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+        ).group_by(
+            cast(ElectricityData.extracted_datetime, Date)
+        ).order_by(
+            cast(ElectricityData.extracted_datetime, Date)
+        ).all()
+    ]
+
+    # Get Actual values
+    actual_values = [
+        total_actual for total_actual, in session.query(
+            func.sum(ElectricityData.value)
+        ).filter(
+            extract('year', ElectricityData.extracted_datetime) == latest_year,
+            extract('month', ElectricityData.extracted_datetime) == latest_month,
+            ElectricityData.data_name == "actual",
+            ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+        ).group_by(
+            cast(ElectricityData.extracted_datetime, Date)
+        ).order_by(
+            cast(ElectricityData.extracted_datetime, Date)
+        ).all()
+    ]
+
+    print("Plan Values:", plan_values)
+    print("Actual Values:", actual_values)
+
+session.close()
