@@ -1,0 +1,90 @@
+from flask import Flask, jsonify
+from sqlalchemy import func, extract, cast, Date
+from datetime import datetime, timedelta
+import plotly.graph_objects as go
+from your_database import session, ElectricityData  # Import your DB session and model
+
+app = Flask(__name__)
+
+def get_latest_year_month():
+    """Retrieve the latest year and month from the database based on extracted_datetime."""
+    return session.query(
+        func.extract('year', func.max(ElectricityData.extracted_datetime)),
+        func.extract('month', func.max(ElectricityData.extracted_datetime))
+    ).first()
+
+def get_days_in_month(year, month):
+    """Return the number of days in a given month."""
+    first_day = datetime(int(year), int(month), 1)
+    last_day = first_day.replace(day=28) + timedelta(days=4)  # Move to next month
+    last_day = last_day - timedelta(days=last_day.day)  # Get last day of the original month
+    return last_day.day
+
+def get_consumption_values(year, month, data_name):
+    """Retrieve daily total values for a given data_name (plan/actual)."""
+    daily_values = {day: 0 for day in range(1, get_days_in_month(year, month) + 1)}  # Default all days to 0
+
+    results = session.query(
+        cast(ElectricityData.extracted_datetime, Date),
+        func.sum(ElectricityData.value)
+    ).filter(
+        extract('year', ElectricityData.extracted_datetime) == year,
+        extract('month', ElectricityData.extracted_datetime) == month,
+        ElectricityData.data_name == data_name,
+        ElectricityData.consumption_type_id.in_([1, 2, 3, 4])
+    ).group_by(
+        cast(ElectricityData.extracted_datetime, Date)
+    ).order_by(
+        cast(ElectricityData.extracted_datetime, Date)
+    ).all()
+
+    for date, total_value in results:
+        daily_values[date.day] = total_value  # Map the value to the correct day
+
+    return list(daily_values.values())
+
+def generate_plotly_chart():
+    """Generates Plotly data for electricity consumption (Plan vs. Actual)."""
+
+    # Get latest year and month
+    latest_year, latest_month = get_latest_year_month()
+
+    if not latest_year or not latest_month:
+        return {"error": "No data available"}
+
+    # Generate x values (Days of the month)
+    num_days = get_days_in_month(latest_year, latest_month)
+    x_values = list(range(1, num_days + 1))
+
+    # Retrieve Plan and Actual values
+    plan_values = get_consumption_values(latest_year, latest_month, "plan")
+    actual_values = get_consumption_values(latest_year, latest_month, "actual")
+
+    # Create Plotly traces
+    data = [
+        go.Scatter(x=x_values, y=plan_values, mode="lines+markers", name="Plan"),
+        go.Scatter(x=x_values, y=actual_values, mode="lines+markers", name="Actual")
+    ]
+
+    # Layout Configuration
+    display = {
+        "title": f"Electricity Consumption - {int(latest_year)}-{int(latest_month):02d}",
+        "xaxis": {"title": "Days of the Month"},
+        "yaxis": {"title": "Consumption (kWh)"},
+    }
+
+    # Plotly Configurations
+    directives = {"responsive": True}
+
+    return {"data": [trace.to_dict() for trace in data], "display": display, "directives": directives}
+
+
+@app.route("/plot-data", methods=["GET"])
+def get_plot_data():
+    """Flask route that returns Plotly.js data in JSON format."""
+    plotly_json = generate_plotly_chart()
+    return jsonify(plotly_json)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
