@@ -1,0 +1,40 @@
+function getDynamicRange(values) {
+    if (!values.length) return [0, 10]; // Default range if no data
+    
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const padding = (maxVal - minVal) * 0.1; // 10% padding
+    
+    return [minVal - padding, maxVal + padding];
+}
+
+const planValues = [50, 75, 100, 120, 150]; // Replace with actual data
+const actualValues = [40, 80, 110, 130, 160]; // Replace with actual data
+
+const yAxisRange = getDynamicRange(planValues);
+const yAxis2Range = getDynamicRange(actualValues);
+
+const trace1 = {
+    x: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+    y: planValues,
+    name: 'Plan',
+    type: 'scatter',
+    yaxis: 'y1'
+};
+
+const trace2 = {
+    x: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+    y: actualValues,
+    name: 'Actual',
+    type: 'scatter',
+    yaxis: 'y2'
+};
+
+const layout = {
+    title: 'Dynamic Y-Axis Range',
+    yaxis: { title: 'Plan Values', range: yAxisRange },
+    yaxis2: { title: 'Actual Values', range: yAxis2Range, overlaying: 'y', side: 'right' },
+    xaxis: { title: 'Month' }
+};
+
+Plotly.newPlot('plot', [trace1, trace2], layout);
