@@ -89,3 +89,21 @@ y_axis2_range_zero_min = get_dynamic_range_with_zero_min(actual_values)
 
 y_axis_range_zero_min, y_axis2_range_zero_min
 
+---------
+def get_dynamic_range_adjusted_max(values):
+    if not values:
+        return [0, 200]  # Default range if no data
+    
+    max_val = max(values)
+    padded_max = max_val * 1.1  # 10% padding
+    
+    # Round up to the next hundred
+    adjusted_max = (int(padded_max // 100) + 1) * 100 if padded_max > 100 else 100
+    
+    return [0, adjusted_max]
+
+# Compute dynamic ranges with min as 0 and max rounded up to the next hundred
+y_axis_range_adjusted_max = get_dynamic_range_adjusted_max(plan_values)
+y_axis2_range_adjusted_max = get_dynamic_range_adjusted_max(actual_values)
+
+y_axis_range_adjusted_max, y_axis2_range_adjusted_max
