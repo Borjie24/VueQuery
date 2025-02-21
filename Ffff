@@ -1,0 +1,58 @@
+import pytest
+import traceback
+from unittest.mock import patch
+from your_module import ApiResponse  # Import the actual module containing `ApiResponse`
+
+def mock_function_that_raises_exception():
+    raise ValueError("Test Exception")
+
+def function_under_test():
+    try:
+        mock_function_that_raises_exception()
+    except Exception as e:
+        traceback.print_exc()
+        api_response = ApiResponse("api_success", "VSF-GET-NG")
+        api_response.contents = {"exception": str(e)}
+        return api_response.get_response()
+
+@pytest.mark.parametrize("exception_type, exception_message", [
+    (ValueError, "Test Exception"),
+    (RuntimeError, "Runtime Error Occurred"),
+])
+def test_function_under_test(exception_type, exception_message):
+    with patch("__main__.mock_function_that_raises_exception", side_effect=exception_type(exception_message)):
+        response = function_under_test()
+        assert response["status"] == "api_success"
+        assert response["code"] == "VSF-GET-NG"
+        assert "exception" in response["contents"]
+        assert response["contents"]["exception"] == exception_message
+----------------
+import { shallowMount } from '@vue/test-utils';
+import Component from '@/components/Component.vue';
+
+describe('Component.vue', () => {
+  it('returns fullpath when params exist', () => {
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $router: {
+            params: { id: 1 },
+            fullpath: '/example/path'
+          }
+        }
+      }
+    });
+    expect(wrapper.vm.routerPath).toBe('/example/path');
+  });
+
+  it('returns an empty string when params do not exist', () => {
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $router: {}
+        }
+      }
+    });
+    expect(wrapper.vm.routerPath).toBe('');
+  });
+});
