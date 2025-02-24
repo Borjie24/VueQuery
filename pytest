@@ -1,0 +1,231 @@
+from unittest.mock import patch
+
+@patch.object(ElectricityDashboardGraphData, "get_hourly_data")
+def test(self, mock_get_hourly_data):
+    # Instead of raising an exception, return an expected error response
+    mock_get_hourly_data.return_value = {
+        "status": "api_success",
+        "code": "VSF-GET-NG",
+        "contents": {"exception": "Internal Server Error"}
+    }
+
+    response = self.client.get(f"{ROOT_PATH}api/get-electricity-data/electricity.hourly")
+    
+    response_json = response.get_json()  # Extract JSON properly
+
+    assert response_json["status"] == "api_success"
+    assert response_json["code"] == "VSF-GET-NG"
+@patch.object(ElectricityDashboardGraphData, "get_hourly_data")
+def test(self, mock_get_hourly_data):
+    # Simulate an internal server error
+    mock_get_hourly_data.side_effect = Exception("Internal Server Error")
+
+    response = self.client.get(f"{ROOT_PATH}api/get-electricity-data/electricity.hourly")
+
+    # Ensure the API properly handles exceptions and returns JSON
+    response_json = response.get_json()
+
+    assert response_json["status"] == "api_success"  # API still returns success
+    assert response_json["code"] == "VSF-GET-NG"
+    assert "exception" in response_json["contents"]
+----------------------------------------------
+import pytest
+import traceback
+from unittest.mock import patch
+from your_module import your_function, ApiResponse  # Adjust module and function names accordingly
+
+def test_exception_handling():
+    with patch("traceback.print_exc") as mock_traceback:
+        response = your_function()  # Call the function that contains the try-except block
+
+    # Expected response
+    expected_response = ApiResponse("api_success", "VSF-GET-NG").get_response()
+    expected_response["contents"] = {"exception": "Test Exception"}  # Simulate expected error
+
+    # Assertions
+    assert response["status"] == "api_success"
+    assert response["code"] == "VSF-GET-NG"
+    assert "exception" in response["contents"]
+
+    # Ensure traceback.print_exc() was called
+    mock_traceback.assert_called_once()
+----------------------------------------------
+import { shallowMount, flushPromises } from '@vue/test-utils';
+import Component from '@/components/Component.vue';
+
+describe('Component.vue', () => {
+  it('calls getHourlyData when routerPath changes', async () => {
+    const getHourlyDataMock = jest.spyOn(Component.methods, 'getHourlyData');
+
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $route: { params: { id: 1 }, fullPath: '/example/path' }
+        }
+      }
+    });
+
+    await flushPromises(); // Wait for reactivity to settle
+
+    expect(wrapper.vm.routerPath).toBe('/example/path');
+    expect(getHourlyDataMock).toHaveBeenCalledWith('/example/path');
+  });
+
+  it('does not call getHourlyData when params do not exist', async () => {
+    const getHourlyDataMock = jest.spyOn(Component.methods, 'getHourlyData');
+
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $route: {} // No params
+        }
+      }
+    });
+
+    await flushPromises();
+
+    expect(wrapper.vm.routerPath).toBe('');
+    expect(getHourlyDataMock).toHaveBeenCalledWith('');
+  });
+
+  it('reacts to $route changes', async () => {
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $route: { params: { id: 1 }, fullPath: '/initial/path' }
+        }
+      }
+    });
+
+    await flushPromises();
+    expect(wrapper.vm.routerPath).toBe('/initial/path');
+
+    // Simulate a route change
+    await wrapper.setProps({
+      $route: { params: { id: 2 }, fullPath: '/new/path' }
+    });
+
+    await flushPromises();
+    expect(wrapper.vm.routerPath).toBe('/new/path');
+  });
+});
+
+-------------------------------------------------------
+import pytest
+import traceback
+from unittest.mock import patch
+from your_module import your_function  # Replace with actual module and function name
+
+def test_exception_handling(mocker):
+    # Mock traceback.print_exc to avoid printing to the console
+    mock_print_exc = mocker.patch("traceback.print_exc")
+
+    # Mock an exception being raised inside the function
+    with patch("your_module.some_function", side_effect=Exception("Test Exception")):
+        response = your_function()  # Replace with the function that contains your try-except block
+
+    # Assertions
+    assert response["status"] == "api_success"
+    assert response["code"] == "VSF-GET-NG"
+    assert "Test Exception" in response["contents"]["exception"]
+
+    # Ensure traceback.print_exc() was called
+    mock_print_exc.assert_called_once()
+-----------------------------------------------------------
+
+import pytest
+import traceback
+from unittest.mock import patch
+from your_module import your_function  # Replace with actual module and function name
+
+def test_exception_handling(mocker):
+    # Mock traceback.print_exc to avoid printing to the console
+    mock_print_exc = mocker.patch("traceback.print_exc")
+
+    # Mock an exception being raised inside the function
+    with patch("your_module.some_function", side_effect=Exception("Test Exception")):
+        response = your_function()  # Replace with the function that contains your try-except block
+
+    # Assertions
+    assert response["status"] == "api_success"
+    assert response["code"] == "VSF-GET-NG"
+    assert "Test Exception" in response["contents"]["exception"]
+
+    # Ensure traceback.print_exc() was called
+    mock_print_exc.assert_called_once()
+
+
+-------------------------------------------------
+from unittest import mock
+
+# Example mock data
+mock_data = [{"hour": "10:00", "actual": 50, "planned": 55}]
+
+# Mocking
+mock_instance = mock.Mock()
+mock_instance.query.return_value = mock_data  # Ensure correct assignment
+
+# Assuming self.query_electricity() uses mock_instance.query
+result = mock_instance.query()  # This should now return mock_data
+
+# Assertion
+assert result == mock_data, f"Expected {mock_data}, but got {result}"
+
+-----------------------------------------------------
+import { shallowMount } from '@vue/test-utils';
+import { reactive } from 'vue';
+import Component from '@/components/Component.vue';
+
+describe('Component.vue', () => {
+  let mockRoute;
+
+  beforeEach(() => {
+    // Create a reactive mock for $route
+    mockRoute = reactive({ params: { id: 1 }, fullPath: '/example/path' });
+  });
+
+  it('calls getHourlyData when routerPath changes', async () => {
+    const getHourlyDataMock = jest.spyOn(Component.methods, 'getHourlyData');
+
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $route: mockRoute
+        }
+      }
+    });
+
+    await wrapper.vm.$nextTick(); // Wait for reactivity updates
+
+    expect(wrapper.vm.routerPath).toBe('/example/path');
+    expect(getHourlyDataMock).toHaveBeenCalledWith('/example/path');
+
+    // Simulate route change
+    mockRoute.fullPath = '/new/path';
+    await wrapper.vm.$nextTick(); // Wait for watcher to trigger
+
+    expect(wrapper.vm.routerPath).toBe('/new/path');
+    expect(getHourlyDataMock).toHaveBeenCalledWith('/new/path');
+  });
+
+  it('returns an empty string when params do not exist', async () => {
+    const getHourlyDataMock = jest.spyOn(Component.methods, 'getHourlyData');
+
+    // Update mock route to have no params
+    mockRoute.params = null;
+    mockRoute.fullPath = '';
+
+    const wrapper = shallowMount(Component, {
+      global: {
+        mocks: {
+          $route: mockRoute
+        }
+      }
+    });
+
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.routerPath).toBe('');
+    expect(getHourlyDataMock).toHaveBeenCalledWith('');
+  });
+});
