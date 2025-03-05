@@ -29,3 +29,304 @@ def get_energy_consumption(engine, period, consumption_type_id, ElectricityData)
     
     df = pd.DataFrame(result, columns=["period", "data_name", "total_value"])
     return dfa
+-------------------------------------------------------
+from datetime import datetime
+import pandas as pd
+from sqlalchemy import create_engine, func, extract, cast, Date
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import select
+
+def get_energy_consumption(engine, period, consumption_type_id, ElectricityData):
+    if period not in ["hourly", "daily", "monthly", "yearly"]:
+        raise ValueError("Invalid period. Choose from 'hourly', 'daily', 'monthly', or 'yearly'.")
+    if consumption_type_id not in [1, 2, 3, 4]:
+        raise ValueError("Invalid consumption type ID. Choose from 1, 2, 3, or 4.")
+    
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    
+    raw_query = session.query(
+        ElectricityData.extracted_datetime,
+        ElectricityData.data_name,
+        ElectricityData.value
+    ).filter(
+        ElectricityData.consumption_type_id == consumption_type_id
+    )
+    
+    raw_data = raw_query.all()
+    session.close()
+    
+    df = pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+    df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+    
+    if period == "hourly":
+        df["period"] = df["extracted_datetime"].dt.floor("H")
+    elif period == "daily":
+        df["period"] = df["extracted_datetime"].dt.date
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    elif period == "monthly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    elif period == "yearly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        df["period"] = df["period"].apply(lambda x: x.year if x.month >= 4 else x.year - 1)
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+    return df
+
+----------------------------------------------------
+from datetime import datetime
+import pandas as pd
+from sqlalchemy import create_engine, func, extract, cast, Date
+from sqlalchemy.orm import sessionmaker
+
+def get_energy_consumption(engine, period, consumption_type_id, ElectricityData):
+    if period not in ["hourly", "daily", "monthly", "yearly"]:
+        raise ValueError("Invalid period. Choose from 'hourly', 'daily', 'monthly', or 'yearly'.")
+    if consumption_type_id not in [1, 2, 3, 4]:
+        raise ValueError("Invalid consumption type ID. Choose from 1, 2, 3, or 4.")
+    
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    today = datetime.now().date()
+    
+    raw_query = session.query(
+        ElectricityData.extracted_datetime,
+        ElectricityData.data_name,
+        ElectricityData.value
+    ).filter(
+        ElectricityData.consumption_type_id == consumption_type_id
+    )
+    
+    if period == "hourly":
+        raw_query = raw_query.filter(cast(ElectricityData.extracted_datetime, Date) == today)
+    
+    raw_data = raw_query.all()
+    session.close()
+    
+    df = pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+    df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+    
+    if period == "hourly":
+        df["period"] = df["extracted_datetime"].dt.floor("H")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        
+        # Ensure all 24 hours are present for both plan and actual
+        hours = pd.date_range(start=today, periods=24, freq='H')
+        df_full = pd.DataFrame({"period": hours})
+        df = df_full.merge(df, on="period", how="left").fillna(0)
+    
+    elif period == "daily":
+        df["period"] = df["extracted_datetime"].dt.date
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        
+        # Ensure all expected days are present
+        days = pd.date_range(start=today.replace(day=1), periods=today.day, freq='D')
+        df_full = pd.DataFrame({"period": days.date})
+        df = df_full.merge(df, on="period", how="left").fillna(0)
+    
+    elif period == "monthly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        
+        # Ensure all months in the fiscal year (Apr-Mar) are present
+        fiscal_year_start = today.year if today.month >= 4 else today.year - 1
+        months = pd.date_range(start=f"{fiscal_year_start}-04-01", periods=12, freq='M').to_period("M")
+        df_full = pd.DataFrame({"period": months})
+        df = df_full.merge(df, on="period", how="left").fillna(0)
+    
+    elif period == "yearly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        df["period"] = df["period"].apply(lambda x: x.year if x.month >= 4 else x.year - 1)
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+    return df
+
+# Example usage
+# engine = create_engine("postgresql://your_user:your_password@your_host:your_port/your_db")
+# df = get_energy_consumption(engine, "hourly", 1, ElectricityData)
+# print(d
+-----------------------
+from datetime import datetime
+import pandas as pd
+from sqlalchemy import create_engine, func, extract, cast, Date
+from sqlalchemy.orm import sessionmaker
+
+def get_energy_consumption(engine, period, consumption_type_id, ElectricityData):
+    if period not in ["hourly", "daily", "monthly", "yearly"]:
+        raise ValueError("Invalid period. Choose from 'hourly', 'daily', 'monthly', or 'yearly'.")
+    if consumption_type_id not in [1, 2, 3, 4]:
+        raise ValueError("Invalid consumption type ID. Choose from 1, 2, 3, or 4.")
+    
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    today = datetime.now().date()
+    
+    raw_query = session.query(
+        ElectricityData.extracted_datetime,
+        ElectricityData.data_name,
+        ElectricityData.value
+    ).filter(
+        ElectricityData.consumption_type_id == consumption_type_id
+    )
+    
+    if period == "hourly":
+        raw_query = raw_query.filter(cast(ElectricityData.extracted_datetime, Date) == today)
+    
+    raw_data = raw_query.all()
+    session.close()
+    
+    df = pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+    df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+    
+    if period == "hourly":
+        df["period"] = df["extracted_datetime"].dt.floor("H")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        hours = pd.date_range(start=today, periods=24, freq='H')
+        df_full = pd.DataFrame({"period": hours})
+    
+    elif period == "daily":
+        df["period"] = df["extracted_datetime"].dt.date
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        days = pd.date_range(start=today.replace(day=1), periods=today.day, freq='D')
+        df_full = pd.DataFrame({"period": days.date})
+    
+    elif period == "monthly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        fiscal_year_start = today.year if today.month >= 4 else today.year - 1
+        months = pd.date_range(start=f"{fiscal_year_start}-04-01", periods=12, freq='M').to_period("M")
+        df_full = pd.DataFrame({"period": months})
+    
+    elif period == "yearly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        df["period"] = df["period"].apply(lambda x: f"FY{x.year % 100}" if x.month >= 4 else f"FY{(x.year - 1) % 100}")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+    df = df.pivot(index="period", columns="data_name", values="value").reset_index()
+    df = df.rename(columns={"plan": "plan_value", "actual": "actual_value"}).fillna(0)
+    
+    return df
+
+return {
+    "period": df["period"].astype(str).tolist(),
+    "plan": df["plan_value"].tolist(),
+    "actual": df["actual_value"].tolist(),
+}
+------------------------------------
+from datetime import datetime
+import pandas as pd
+from sqlalchemy import create_engine, func, extract, cast, Date
+from sqlalchemy.orm import sessionmaker
+
+def get_energy_consumption(engine, period, consumption_type_id, ElectricityData):
+    if period not in ["hourly", "daily", "monthly", "yearly"]:
+        raise ValueError("Invalid period. Choose from 'hourly', 'daily', 'monthly', or 'yearly'.")
+    if consumption_type_id not in [1, 2, 3, 4]:
+        raise ValueError("Invalid consumption type ID. Choose from 1, 2, 3, or 4.")
+    
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    today = datetime.now().date()
+    
+    raw_query = session.query(
+        ElectricityData.extracted_datetime,
+        ElectricityData.data_name,
+        ElectricityData.value
+    ).filter(
+        ElectricityData.consumption_type_id == consumption_type_id
+    )
+    
+    if period == "hourly":
+        raw_query = raw_query.filter(cast(ElectricityData.extracted_datetime, Date) == today)
+    
+    raw_data = raw_query.all()
+    session.close()
+    
+    df = pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+    df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+    
+    if period == "hourly":
+        df["period"] = df["extracted_datetime"].dt.floor("H")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        hours = pd.date_range(start=today, periods=24, freq='H')
+        df_full = pd.DataFrame({"period": hours})
+    
+    elif period == "daily":
+        df["period"] = df["extracted_datetime"].dt.date
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        days = pd.date_range(start=today.replace(day=1), periods=today.day, freq='D')
+        df_full = pd.DataFrame({"period": days.date})
+    
+    elif period == "monthly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+        fiscal_year_start = today.year if today.month >= 4 else today.year - 1
+        months = pd.date_range(start=f"{fiscal_year_start}-04-01", periods=12, freq='M').to_period("M")
+        df_full = pd.DataFrame({"period": months})
+    
+    elif period == "yearly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+        df["period"] = df["period"].apply(lambda x: f"FY{x.year % 100}" if x.month >= 4 else f"FY{(x.year - 1) % 100}")
+        df = df.groupby(["period", "data_name"], as_index=False).sum()
+    
+    df = df.pivot(index="period", columns="data_name", values="value").reset_index()
+    df = df.rename(columns={"plan": "plan_value", "actual": "actual_value"}).fillna(0)
+    
+    return {
+        "period": df["period"].astype(str).tolist(),
+        "plan": df["plan_value"].tolist(),
+        "actual": df["actual_value"].tolist(),
+    }
+-------------------------
+import pytest
+import pandas as pd
+from datetime import datetime, timedelta
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from your_module import get_energy_consumption  # Replace with actual module
+
+@pytest.fixture
+def mock_engine():
+    return create_engine("sqlite:///:memory:")
+
+@pytest.fixture
+def mock_data():
+    today = datetime.now().date()
+    data = [
+        {"extracted_datetime": today - timedelta(days=i), "data_name": "plan", "value": 100} for i in range(10)
+    ] + [
+        {"extracted_datetime": today - timedelta(days=i), "data_name": "actual", "value": 80} for i in range(8)
+    ]  # Simulate missing data for actual
+    return pd.DataFrame(data)
+
+def test_hourly(mock_engine, mock_data):
+    result = get_energy_consumption(mock_engine, "hourly", 1, mock_data)
+    assert len(result["period"]) == 24
+    assert len(result["plan"]) == 24
+    assert len(result["actual"]) == 24  # Ensuring missing data is handled
+
+def test_daily(mock_engine, mock_data):
+    result = get_energy_consumption(mock_engine, "daily", 1, mock_data)
+    assert len(result["period"]) == datetime.now().day
+    assert all(isinstance(p, str) for p in result["period"])  # Ensure date format
+
+def test_monthly(mock_engine, mock_data):
+    result = get_energy_consumption(mock_engine, "monthly", 1, mock_data)
+    assert len(result["period"]) == 12
+    assert result["period"][0].startswith("202")  # Check format
+
+def test_yearly(mock_engine, mock_data):
+    result = get_energy_consumption(mock_engine, "yearly", 1, mock_data)
+    assert len(result["period"]) > 0
+    assert all(p.startswith("FY") for p in result["period"])  # Fiscal year format check
