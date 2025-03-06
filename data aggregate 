@@ -50,3 +50,85 @@ def get_energy_consumption(engine, period, consumption_type_id, ElectricityData)
     result = df.to_dict(orient="records")
     return result
 -----------
+import pytest
+import pandas as pd
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from your_module import get_energy_consumption  # Replace with actual module name
+
+@pytest.fixture
+def mock_engine():
+    """Create a mock in-memory SQLite database engine."""
+    return create_engine("sqlite:///:memory:")
+
+@pytest.fixture
+def mock_electricity_data():
+    """Mock ElectricityData ORM model."""
+    class MockElectricityData:
+        extracted_datetime = None
+        data_name = None
+        value = None
+        consumption_type_id = None
+
+    return MockElectricityData
+
+@pytest.fixture
+def mock_session(mock_engine, mock_electricity_data):
+    """Mock SQLAlchemy session and query."""
+    Session = sessionmaker(bind=mock_engine)
+    session = Session()
+    
+    today = datetime.now()
+
+    # Sample mock data for different periods
+    data = [
+        (today - timedelta(hours=i), "plan", 100, 1) for i in range(24)
+    ] + [
+        (today - timedelta(hours=i), "actual", 80, 1) for i in range(20)
+    ] + [
+        (today - timedelta(days=i), "plan", 200, 1) for i in range(30)
+    ] + [
+        (today - timedelta(days=i), "actual", 150, 1) for i in range(25)
+    ]
+
+    # Convert to mock query results
+    mock_query = MagicMock()
+    mock_query.all.return_value = [
+        mock_electricity_data(
+            extracted_datetime=row[0],
+            data_name=row[1],
+            value=row[2],
+            consumption_type_id=row[3]
+        ) for row in data
+    ]
+
+    session.query = MagicMock(return_value=mock_query)
+    return session
+
+@pytest.mark.parametrize("period, expected_length", [
+    ("hourly", 24),
+    ("daily", 30),
+    ("monthly", 12),
+    ("yearly", 1)
+])
+def test_get_energy_consumption(mock_engine, mock_session, mock_electricity_data, period, expected_length):
+    """Test the get_energy_consumption function for different periods."""
+    result = get_energy_consumption(mock_engine, period, 1, mock_electricity_data)
+
+    assert isinstance(result, list)
+    assert len(result) > 0
+    assert "period" in result[0]
+    assert "plan_value" in result[0]
+    assert "actual_value" in result[0]
+
+    # Check period format
+    if period == "hourly":
+        assert len(result) <= expected_length
+    elif period == "daily":
+        assert len(result) <= expected_length
+    elif period == "monthly":
+        assert len(result) == expected_length
+    elif period == "yearly":
+        assert all(p["period"].startswith("FY") for p in result)  # Fiscal year format check
