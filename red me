@@ -1,0 +1,140 @@
+1️⃣ Class Initialization (__init__)
+python
+Copy code
+def __init__(self, engine, ElectricityData):
+    self.engine = engine
+    self.ElectricityData = ElectricityData
+    self.session = sessionmaker(bind=self.engine)()
+engine → SQLAlchemy database engine (used to connect to the database).
+ElectricityData → ORM model representing the energy consumption table.
+session → A database session to execute queries.
+2️⃣ Fetch Data from Database (fetch_data)
+python
+Copy code
+def fetch_data(self, consumption_type_id, period):
+Retrieves raw energy data from the database.
+Validates inputs:
+period should be one of ["hourly", "daily", "monthly", "yearly"].
+consumption_type_id should be between 1 and 4.
+How It Works
+python
+Copy code
+today = datetime.now().date()
+query = self.session.query(
+    self.ElectricityData.extracted_datetime,
+    self.ElectricityData.data_name,
+    self.ElectricityData.value
+).filter(self.ElectricityData.consumption_type_id == consumption_type_id)
+Selects the extracted_datetime, data_name, and value columns.
+Filters by consumption_type_id.
+python
+Copy code
+if period == "hourly":
+    query = query.filter(cast(self.ElectricityData.extracted_datetime, Date) == today)
+If "hourly" data is requested, filters only today's records.
+python
+Copy code
+raw_data = query.all()
+return pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+Converts the query result into a Pandas DataFrame.
+3️⃣ Aggregate Data (aggregate_data)
+python
+Copy code
+def aggregate_data(self, df, period):
+Groups and aggregates energy consumption data by period (hourly, daily, etc.).
+How It Works
+python
+Copy code
+df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+Converts extracted_datetime to datetime format.
+Period-based Aggregation
+python
+Copy code
+if period == "hourly":
+    df["period"] = df["extracted_datetime"].dt.floor("H")
+elif period == "daily":
+    df["period"] = df["extracted_datetime"].dt.date
+elif period == "monthly":
+    df["period"] = df["extracted_datetime"].dt.to_period("M")
+elif period == "yearly":
+    df["period"] = df["extracted_datetime"].dt.to_period("M")
+    df["period"] = df["period"].apply(lambda x: f"FY{x.year % 100}" if x.month >= 4 else f"FY{(x.year - 1) % 100}")
+Groups data into hourly, daily, monthly, or yearly.
+Fiscal year adjustment → If the month is April or later, the year remains the same; otherwise, the previous year is used.
+python
+Copy code
+df = df.groupby(["period", "data_name"], as_index=False).sum()
+Groups by period and data_name (e.g., actual or plan values).
+Sums energy values for each period.
+4️⃣ Handle Missing Periods (fill_missing_periods)
+python
+Copy code
+def fill_missing_periods(self, df, period):
+Ensures all expected time periods exist, filling missing ones with 0.
+How It Works
+python
+Copy code
+today = datetime.now().date()
+Gets today's date.
+Handle Missing Periods Based on period
+python
+Copy code
+if period == "hourly":
+    hours = pd.date_range(start=today, periods=24, freq='H')
+    df_full = pd.DataFrame({"period": hours})
+Creates a list of 24 hours for today.
+python
+Copy code
+elif period == "daily":
+    days = pd.date_range(start=today.replace(day=1), periods=today.day, freq='D')
+    df_full = pd.DataFrame({"period": days.date})
+Generates a list of days in the current month.
+python
+Copy code
+elif period == "monthly":
+    fiscal_year_start = today.year if today.month >= 4 else today.year - 1
+    months = pd.date_range(start=f"{fiscal_year_start}-04-01", periods=12, freq='M').to_period("M")
+    df_full = pd.DataFrame({"period": months})
+Ensures all fiscal year months (April to March) are present.
+python
+Copy code
+df = df_full.merge(df, on="period", how="left").fillna(0)
+Merges with the original aggregated DataFrame and fills missing values with 0.
+5️⃣ Get Final Energy Consumption Data (get_energy_consumption)
+python
+Copy code
+def get_energy_consumption(self, consumption_type_id, period):
+Fetches, aggregates, fills missing data, and formats the final output.
+How It Works
+python
+Copy code
+df = self.fetch_data(consumption_type_id, period)
+df = self.aggregate_data(df, period)
+df = self.fill_missing_periods(df, period)
+Fetch raw data → Aggregate → Fill missing periods.
+python
+Copy code
+df = df.pivot(index="period", columns="data_name", values="value").reset_index()
+df = df.rename(columns={"plan": "plan_value", "actual": "actual_value"}).fillna(0)
+Pivots the table, making plan and actual separate columns.
+Renames columns for clarity.
+❌ Bug: Wrong Indentation in return df
+
+python
+Copy code
+return df  # Remove the extra indentation before return
+6️⃣ Close Database Session (close_session)
+python
+Copy code
+def close_session(self):
+    self.session.close()
+Closes the SQLAlchemy session to free resources.
+📝 Summary
+✅ What This Class Does
+Fetches energy consumption data from a database.
+Aggregates data by hourly, daily, monthly, or yearly.
+Handles missing periods (ensures data continuity).
+Formats output, renaming plan → plan_value and actual → actual_value.
+❌ Issues to Fix
+Indentation bug before return df in get_energy_consumption().
+Missing type hints for function parameters.
