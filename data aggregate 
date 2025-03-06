@@ -1,0 +1,52 @@
+from datetime import datetime
+import pandas as pd
+from sqlalchemy import create_engine, func, extract, cast, Date
+from sqlalchemy.orm import sessionmaker
+
+def get_energy_consumption(engine, period, consumption_type_id, ElectricityData):
+    if period not in ["hourly", "daily", "monthly", "yearly"]:
+        raise ValueError("Invalid period. Choose from 'hourly', 'daily', 'monthly', or 'yearly'.")
+    if consumption_type_id not in [1, 2, 3, 4]:
+        raise ValueError("Invalid consumption type ID. Choose from 1, 2, 3, or 4.")
+
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    today = datetime.now().date()
+
+    raw_query = session.query(
+        ElectricityData.extracted_datetime,
+        ElectricityData.data_name,
+        ElectricityData.value
+    ).filter(
+        ElectricityData.consumption_type_id == consumption_type_id
+    )
+
+    if period == "hourly":
+        raw_query = raw_query.filter(cast(ElectricityData.extracted_datetime, Date) == today)
+
+    raw_data = raw_query.all()
+    session.close()
+
+    df = pd.DataFrame(raw_data, columns=["extracted_datetime", "data_name", "value"])
+    df["extracted_datetime"] = pd.to_datetime(df["extracted_datetime"])
+
+    if period == "hourly":
+        df["period"] = df["extracted_datetime"].dt.floor("H")
+    elif period == "daily":
+        df["period"] = df["extracted_datetime"].dt.date
+    elif period == "monthly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        fiscal_year_start = today.year if today.month >= 4 else today.year - 1
+        months = pd.date_range(start=f"{fiscal_year_start}-04-01", periods=12, freq='M').to_period("M")
+        df = df[df["period"].isin(months)]
+    elif period == "yearly":
+        df["period"] = df["extracted_datetime"].dt.to_period("M")
+        df["period"] = df["period"].apply(lambda x: f"FY{x.year % 100}" if x.month >= 4 else f"FY{(x.year - 1) % 100}")
+    
+    df = df.groupby(["period", "data_name"], as_index=False).sum()
+    df = df.pivot(index="period", columns="data_name", values="value").reset_index()
+    df = df.rename(columns={"plan": "plan_value", "actual": "actual_value"}).fillna(0)
+    
+    result = df.to_dict(orient="records")
+    return result
+-----------
