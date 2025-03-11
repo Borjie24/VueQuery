@@ -1,0 +1,102 @@
+<template>
+  <div>
+    <div ref="plotlyChart" style="width: 100%; height: 500px;"></div>
+  </div>
+</template>
+
+<script>
+import Plotly from 'plotly.js-dist';
+
+export default {
+  mounted() {
+    this.renderChart();
+  },
+  methods: {
+    renderChart() {
+      const xValues = [1, 2, 3, 4, 5];
+      const timeLabels = ['00:00', '01:00', '02:00', '03:00', '04:00'];
+      
+      const planValues = [100, 120, 130, 125, 140];
+      const actualValues = [90, 110, 125, 130, 135];
+      const planAccumValues = [100, 220, 350, 475, 615];
+      const actualAccumValues = [90, 200, 325, 455, 590];
+
+      const data = [
+        {
+          x: xValues,
+          y: planValues,
+          name: 'Plan',
+          type: 'bar',
+          marker: { color: 'blue' },
+          text: timeLabels,
+          hoverinfo: 'none'
+        },
+        {
+          x: xValues,
+          y: actualValues,
+          name: 'Actual',
+          type: 'bar',
+          marker: { color: 'red' },
+          text: timeLabels,
+          hoverinfo: 'none'
+        },
+        {
+          x: xValues,
+          y: planAccumValues,
+          name: 'Plan Accum',
+          type: 'scatter',
+          mode: 'lines+markers',
+          line: { color: 'blue', dash: 'solid' },
+          yaxis: 'y2',
+          text: timeLabels,
+          hoverinfo: 'none'
+        },
+        {
+          x: xValues,
+          y: actualAccumValues,
+          name: 'Actual Accum',
+          type: 'scatter',
+          mode: 'lines+markers',
+          line: { color: 'red', dash: 'solid' },
+          yaxis: 'y2',
+          text: timeLabels,
+          hoverinfo: 'none'
+        }
+      ];
+
+      const layout = {
+        title: 'Plan vs Actual with Accumulated Trends',
+        xaxis: { title: 'Time (Hours)', tickmode: 'array', tickvals: xValues, ticktext: xValues },
+        yaxis: { title: 'Energy Consumption (kWh)' },
+        yaxis2: {
+          title: 'Accumulated Consumption (kWh)',
+          overlaying: 'y',
+          side: 'right'
+        },
+        barmode: 'group',
+        hovermode: 'x unified',
+        hoverlabel: { bgcolor: 'white', font: { color: 'black' } }
+      };
+
+      Plotly.newPlot(this.$refs.plotlyChart, data, layout).then(gd => {
+        gd.on('plotly_hover', event => {
+          const index = event.points[0].pointIndex;
+          const hoverText = `${timeLabels[index]}\nPlan: ${planValues[index]}\nActual: ${actualValues[index]}\nPlan Accum: ${planAccumValues[index]}\nActual Accum: ${actualAccumValues[index]}`;
+          
+          Plotly.relayout(gd, {
+            annotations: [{
+              x: event.points[0].x,
+              y: Math.max(...event.points.map(p => p.y)),
+              text: hoverText.replace(/\n/g, '<br>'),
+              showarrow: false,
+              font: { size: 12, color: 'black' },
+              bgcolor: 'white',
+              borderpad: 4
+            }]
+          });
+        });
+      });
+    }
+  }
+};
+</script>
